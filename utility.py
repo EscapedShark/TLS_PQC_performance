@@ -48,6 +48,7 @@ def run_tc_command(command):
 def delete_network_namespaces():
     """
     删除现有的 server_ns 和 client_ns 命名空间。
+    delete existing server_ns and client_ns network namespaces.
     """
     namespaces = ['server_ns', 'client_ns']
     for ns in namespaces:
@@ -60,42 +61,53 @@ def delete_network_namespaces():
 def create_network_namespaces():
     """
     创建新的 server_ns 和 client_ns 命名空间，并配置 veth 对。
+    create new server_ns and client_ns network namespaces and configure veth pairs.
     """
     try:
         # 创建命名空间
+        # create namespaces
         subprocess.run(['sudo', 'ip', 'netns', 'add', 'server_ns'], check=True)
         subprocess.run(['sudo', 'ip', 'netns', 'add', 'client_ns'], check=True)
         print("Created network namespaces: server_ns, client_ns")
 
         # 创建 veth 对
+        # create veth pair
         subprocess.run(['sudo', 'ip', 'link', 'add', 'veth0', 'type', 'veth', 'peer', 'name', 'veth1'], check=True)
         print("Created veth pair: veth0 <-> veth1")
 
         # 将 veth0 移动到 server_ns，veth1 移动到 client_ns
+        # move veth0 to server_ns, veth1 to client_ns
         subprocess.run(['sudo', 'ip', 'link', 'set', 'veth0', 'netns', 'server_ns'], check=True)
         subprocess.run(['sudo', 'ip', 'link', 'set', 'veth1', 'netns', 'client_ns'], check=True)
         print("Assigned veth0 to server_ns and veth1 to client_ns")
 
         # 列出 server_ns 中的接口
+        # list interfaces in server_ns
         print("Interfaces in server_ns before setting up:")
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'server_ns', 'ip', 'link', 'show'], check=True)
 
         # 配置 IP 地址和启动接口
+        # configure IP addresses and bring up interfaces
+
         # 在 server_ns 中
+        # in server_ns
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'server_ns', 'ip', 'addr', 'add', '10.200.1.1/24', 'dev', 'veth0'], check=True)
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'server_ns', 'ip', 'link', 'set', 'veth0', 'up'], check=True)
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'server_ns', 'ip', 'link', 'set', 'lo', 'up'], check=True)  # 确保使用 'lo'
 
         # 列出 server_ns 中的接口
+        # list interfaces in server_ns
         print("Interfaces in server_ns after setting up:")
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'server_ns', 'ip', 'link', 'show'], check=True)
 
         # 在 client_ns 中
+        # in client_ns
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'client_ns', 'ip', 'addr', 'add', '10.200.1.2/24', 'dev', 'veth1'], check=True)
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'client_ns', 'ip', 'link', 'set', 'veth1', 'up'], check=True)
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'client_ns', 'ip', 'link', 'set', 'lo', 'up'], check=True)  # 确保使用 'lo'
 
         # 列出 client_ns 中的接口
+        # list interfaces in client_ns
         print("Interfaces in client_ns after setting up:")
         subprocess.run(['sudo', 'ip', 'netns', 'exec', 'client_ns', 'ip', 'link', 'show'], check=True)
 
@@ -109,14 +121,17 @@ def create_network_namespaces():
 def set_network_conditions(packet_loss=None, bandwidth=None, interface='veth0'):
     """
     设置网络条件，例如丢包率和带宽限制。
+    set network conditions such as packet loss and bandwidth limit.
     """
     try:
         # 删除现有的 qdisc（忽略错误）
+        # delete existing qdisc (ignore errors)
         cmd_del_veth0 = ["sudo", "ip", "netns", "exec", "server_ns", "tc", "qdisc", "del", "dev", interface, "root"]
         subprocess.run(cmd_del_veth0, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     
         if bandwidth:
             # 添加 htb 根 qdisc 到 veth0，明确指定 handle 1:
+            # add htb root qdisc to veth0, explicitly specifying handle 1:
             cmd_add_htb = [
                 "sudo", "ip", "netns", "exec", "server_ns",
                 "tc", "qdisc", "add", "dev", interface, "root", "handle", "1:", "htb", "default", "12"
@@ -124,6 +139,7 @@ def set_network_conditions(packet_loss=None, bandwidth=None, interface='veth0'):
             subprocess.run(cmd_add_htb, check=True)
     
             # 添加 htb 类
+            # add htb class
             cmd_add_class = [
                 "sudo", "ip", "netns", "exec", "server_ns",
                 "tc", "class", "add", "dev", interface, "parent", "1:", "classid", "1:12", "htb", "rate", bandwidth
@@ -131,12 +147,14 @@ def set_network_conditions(packet_loss=None, bandwidth=None, interface='veth0'):
             subprocess.run(cmd_add_class, check=True)
     
             # 添加 netem qdisc 到 htb 类
+            # add netem qdisc to htb class
             cmd_add_netem = ["sudo", "ip", "netns", "exec", "server_ns", "tc", "qdisc", "add", "dev", interface, "parent", "1:12", "handle", "10:", "netem"]
             if packet_loss is not None:
                 cmd_add_netem.extend(["loss", f"{packet_loss}%"])
             subprocess.run(cmd_add_netem, check=True)
         else:
             # 仅添加 netem qdisc 到 root
+            # add netem qdisc to root
             cmd_add_netem = ["sudo", "ip", "netns", "exec", "server_ns", "tc", "qdisc", "add", "dev", interface, "root", "handle", "1:", "netem"]
             if packet_loss is not None:
                 cmd_add_netem.extend(["loss", f"{packet_loss}%"])
@@ -145,11 +163,13 @@ def set_network_conditions(packet_loss=None, bandwidth=None, interface='veth0'):
         print(f"Network conditions set on server_ns: packet_loss={packet_loss}%, bandwidth={bandwidth} on {interface}")
     
         # 设置 veth1 在 client_ns 中
+        # set veth1 in client_ns
         interface_client = 'veth1'
         subprocess.run(["sudo", "ip", "netns", "exec", "client_ns", "tc", "qdisc", "del", "dev", interface_client, "root"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     
         if bandwidth:
             # 添加 htb 根 qdisc 到 veth1，明确指定 handle 1:
+            # add htb root qdisc to veth1, explicitly specifying handle 1:
             cmd_add_htb_client = [
                 "sudo", "ip", "netns", "exec", "client_ns",
                 "tc", "qdisc", "add", "dev", interface_client, "root", "handle", "1:", "htb", "default", "12"
@@ -157,6 +177,7 @@ def set_network_conditions(packet_loss=None, bandwidth=None, interface='veth0'):
             subprocess.run(cmd_add_htb_client, check=True)
     
             # 添加 htb 类
+            # add htb class
             cmd_add_class_client = [
                 "sudo", "ip", "netns", "exec", "client_ns",
                 "tc", "class", "add", "dev", interface_client, "parent", "1:", "classid", "1:12", "htb", "rate", bandwidth
@@ -164,12 +185,14 @@ def set_network_conditions(packet_loss=None, bandwidth=None, interface='veth0'):
             subprocess.run(cmd_add_class_client, check=True)
     
             # 添加 netem qdisc 到 htb 类
+            # add netem qdisc to htb class
             cmd_add_netem_client = ["sudo", "ip", "netns", "exec", "client_ns", "tc", "qdisc", "add", "dev", interface_client, "parent", "1:12", "handle", "10:", "netem"]
             if packet_loss is not None:
                 cmd_add_netem_client.extend(["loss", f"{packet_loss}%"])
             subprocess.run(cmd_add_netem_client, check=True)
         else:
             # 仅添加 netem qdisc 到 root
+            # add netem qdisc to root
             cmd_add_netem_client = ["sudo", "ip", "netns", "exec", "client_ns", "tc", "qdisc", "add", "dev", interface_client, "root", "handle", "1:", "netem"]
             if packet_loss is not None:
                 cmd_add_netem_client.extend(["loss", f"{packet_loss}%"])
@@ -185,10 +208,12 @@ def set_network_conditions(packet_loss=None, bandwidth=None, interface='veth0'):
 def setup_network_namespaces():
     """
     清理现有网络命名空间并创建新的命名空间和网络配置。
+    clean up existing network namespaces and create new namespaces and network configuration.
     """
     delete_network_namespaces()
     create_network_namespaces()
     # 等待网络接口完全启动
+    # wait for network interfaces to be fully up
     time.sleep(2)
 
 
@@ -214,6 +239,7 @@ def run_command(command):
 
 
 # 添加一个调试函数来打印环境信息
+# add a debug function to print environment information
 def print_debug_info():
     print("Python version:", sys.version)
     print("Operating System:", os.name, "-", sys.platform)
@@ -229,6 +255,7 @@ def generate_cert_and_key(key_dir, sig_algorithm):
     key_file = os.path.join(key_dir, "key.pem")
 
     # 定义算法分类
+    # define algorithm categories
     pqc_algorithms = ['falcon512', 'falcon1024', 'falconpadded512', 'falconpadded1024',
                       'dilithium2', 'dilithium3', 'dilithium5',
                       'sphincssha2128fsimple', 'sphincssha2128ssimple', 'sphincssha2192fsimple',
@@ -241,9 +268,11 @@ def generate_cert_and_key(key_dir, sig_algorithm):
                          'p256_mldsa44', 'rsa3072_mldsa44', 'p384_mldsa65', 'p521_mldsa87']
 
     # 标准化算法名称
+    # standardize algorithm name
     sig_algorithm = sig_algorithm.lower()
 
     # 确定算法类型和相应的命令
+    # determine algorithm type and corresponding command
     if sig_algorithm in pqc_algorithms or sig_algorithm in hybrid_algorithms:
         key_gen_command = [
             OPENSSL_PATH, "genpkey",
@@ -283,6 +312,7 @@ def generate_cert_and_key(key_dir, sig_algorithm):
     
     else:
         # 对于其他未知类型，尝试直接使用算法名称
+        # for other unknown types, try using the algorithm name directly
         command = [
             "openssl", "req", "-x509", "-new", "-newkey", sig_algorithm,
             "-keyout", key_file, "-out", cert_file,
@@ -312,22 +342,26 @@ def load_config(config_file):
     network = config.get('network_settings', {})
     
     # 验证packet_loss
+    # validate packet_loss
     packet_loss = network.get('packet_loss')
     if packet_loss is not None:
         if not isinstance(packet_loss, (int, float)) or not (0 <= packet_loss <= 100):
             raise ValueError("packet_loss must be a number between 0 and 100")
     
     # 验证bandwidth
+    # validate bandwidth
     bandwidth = network.get('bandwidth')
     if bandwidth is not None:
         if not isinstance(bandwidth, str) or not re.match(r'^\d+(kbit|mbit|gbit)$', bandwidth):
             raise ValueError("bandwidth must be a string with units, e.g., '100mbit'")
     
     # 验证接口在相应的命名空间中是否存在
+    # validate that the interface exists in the respective namespace
     interface = network.get('interface', 'veth0')
     interface_client = 'veth1'
     
     # 检查 server_ns 中的 veth0
+    # check veth0 in server_ns
     try:
         interfaces_server = subprocess.check_output(['sudo', 'ip', 'netns', 'exec', 'server_ns', 'ip', 'link', 'show'], text=True)
         if interface not in interfaces_server:
@@ -336,6 +370,7 @@ def load_config(config_file):
         raise ValueError(f"Failed to list interfaces in 'server_ns': {e.stderr}")
     
     # 检查 client_ns 中的 veth1
+    # check veth1 in client_ns
     try:
         interfaces_client = subprocess.check_output(['sudo', 'ip', 'netns', 'exec', 'client_ns', 'ip', 'link', 'show'], text=True)
         if interface_client not in interfaces_client:
@@ -348,14 +383,16 @@ def load_config(config_file):
 def save_result(result_dir, algorithm, results, client_output):
     """
     保存基准测试结果到文件
+    Save benchmark results to a file
     
     Args:
-        result_dir: 结果保存目录
-        algorithm: 算法名称
-        results: 包含多次运行结果的列表，每个元素是包含详细信息的字典
-        client_output: 客户端输出信息
+        result_dir: 结果保存目录 (directory to save results)
+        algorithm: 算法名称 (algorithm name)
+        results: 包含多次运行结果的列表，每个元素是包含详细信息的字典 (list containing results of multiple runs, each element is a dictionary with detailed information)
+        client_output: 客户端输出信息 (client output information)
     """
     # 从结果中提取各项指标
+    # extract various metrics from the results
     total_runs = len(results)
     successful_runs = len([r for r in results if r['success']])
     failed_runs = total_runs - successful_runs
@@ -363,6 +400,7 @@ def save_result(result_dir, algorithm, results, client_output):
     success_rate = 100 - error_rate
     
     # 提取成功运行的性能数据
+    # extract performance data from successful runs
     handshake_times = [r['handshake_time'] for r in results if r['success'] and r['handshake_time'] is not None]
     memory_usages = [r['memory_usage'] for r in results if r['success'] and r['memory_usage'] is not None]
     cpu_usages = [r['cpu_usage'] for r in results if r['success'] and r['cpu_usage'] is not None]
@@ -370,6 +408,7 @@ def save_result(result_dir, algorithm, results, client_output):
     
     with open(os.path.join(result_dir, f"{algorithm}_results.txt"), 'w') as f:
         # 写入错误统计信息
+        # write error statistics
         f.write(f"\n=== Error Statistics ===\n")
         f.write(f"Total runs: {total_runs}\n")
         f.write(f"Successful runs: {successful_runs}\n")
@@ -378,6 +417,7 @@ def save_result(result_dir, algorithm, results, client_output):
         f.write(f"Error rate: {error_rate:.2f}%\n\n")
 
         # 写入性能统计信息
+        # write performance statistics
         if handshake_times:
             avg_handshake_time = sum(handshake_times) / len(handshake_times)
             f.write(f"Average handshake time for {algorithm}: {avg_handshake_time:.6f} seconds\n")
@@ -411,6 +451,7 @@ def save_result(result_dir, algorithm, results, client_output):
             f.write(f"Standard deviation of CPU usage (Total): {np.std(cpu_usages_total):.2f}%\n")
         
         # 写入详细的错误信息
+        # write detailed error information
         failed_runs_data = [r for r in results if not r['success']]
         if failed_runs_data:
             f.write("\n=== Detailed Error Information ===\n")
@@ -455,18 +496,18 @@ def analyze_results(result_dir):
     results = {}
     for filename in os.listdir(result_dir):
         if filename.endswith('_results.txt'):
-            algorithm = filename.rsplit('_', 1)[0]  # 支持带下划线的算法名
+            algorithm = filename.rsplit('_', 1)[0]  # 支持带下划线的算法名 (support algorithm names with underscores)
             filepath = os.path.join(result_dir, filename)
             try:
                 with open(filepath, 'r') as f:
                     content = f.read()
-                    # 解析错误统计信息
+                    # 解析错误统计信息 (parse error statistics)
                     total_runs_match = re.search(r"Total runs: (\d+)", content)
                     failed_runs_match = re.search(r"Failed runs: (\d+)", content)
                     success_rate_match = re.search(r"Success rate: ([\d.]+)%", content)
                     error_rate_match = re.search(r"Error rate: ([\d.]+)%", content)
                     
-                    # 解析性能指标
+                    # 解析性能指标 (parse performance metrics)
                     handshake_time_match = re.search(r"Average handshake time for .+: (.+) seconds", content)
                     memory_match = re.search(r"Average memory usage for .+: (.+) KB", content)
                     cpu_match = re.search(r"Average CPU usage \(Per Core\) for .+: (.+)%", content)
@@ -481,7 +522,7 @@ def analyze_results(result_dir):
                         print(f"Could not find error statistics in {filename}")
                         continue
                     
-                    # 提取所有测量数据
+                    # 提取所有测量数据 (extract all measurement data)
                     handshake_times_match = re.search(r"All handshake times: (.+)\n", content)
                     memory_usages_match = re.search(r"All memory usages: (.+)\n", content)
                     cpu_usages_match = re.search(r"All CPU usages \(Per Core\): (.+)\n", content)
@@ -525,14 +566,14 @@ def analyze_results(result_dir):
                 print(f"Error processing {filename}: {str(e)}")
 
     if results:
-        # 创建DataFrame
+        # 创建DataFrame (create DataFrame)
         df = pd.DataFrame.from_dict(results, orient='index')
         
-        # 创建图表函数
+        # 创建图表函数 (create plotting functions)
         def create_horizontal_bar_plot(data, title, xlabel, filename, stacked=False, colors=None):
             plt.figure(figsize=(12, max(8, len(data) * 0.3)))
             if stacked:
-                # 堆叠条形图 (错误统计)
+                # 堆叠条形图 (错误统计) (stacked bar plot for error statistics)
                 bars = plt.barh(range(len(data[0])), data[0], label='Success', color=colors[0])
                 bars_error = plt.barh(range(len(data[1])), data[1], left=data[0], label='Error', color=colors[1])
                 for i in range(len(data[0])):
@@ -557,7 +598,7 @@ def analyze_results(result_dir):
             plt.savefig(os.path.join(result_dir, filename))
             plt.close()
 
-        # 绘制错误统计图
+        # 绘制错误统计图 (堆叠条形图)
         success_rates = df['success_rate']
         error_rates = df['error_rate']
         create_horizontal_bar_plot(
@@ -570,7 +611,7 @@ def analyze_results(result_dir):
             colors=['green', 'red']
         )
 
-        # 绘制平均握手时间图
+        # 绘制平均握手时间图 （draw average handshake time plot）
         create_horizontal_bar_plot(
             df['avg_handshake_time'], 
             'Average Handshake Time by Algorithm', 
@@ -578,7 +619,7 @@ def analyze_results(result_dir):
             'avg_handshake_time.png'
         )
 
-        # 绘制平均内存使用图
+        # 绘制平均内存使用图 （draw average memory usage plot）
         create_horizontal_bar_plot(
             df['avg_memory'], 
             'Average Memory Usage by Algorithm', 
@@ -586,7 +627,7 @@ def analyze_results(result_dir):
             'avg_memory_usage.png'
         )
 
-        # 绘制平均CPU使用率图(每核)
+        # 绘制平均CPU使用率图(每核) （draw average CPU usage plot (per core)）
         create_horizontal_bar_plot(
             df['avg_cpu'], 
             'Average CPU Usage by Algorithm (Per Core)', 
@@ -594,7 +635,7 @@ def analyze_results(result_dir):
             'avg_cpu_usage.png'
         )
 
-        # 绘制总CPU使用率图
+        # 绘制总CPU使用率图 （draw total CPU usage plot）
         create_horizontal_bar_plot(
             df['avg_cpu_total'], 
             'Average Total CPU Usage by Algorithm', 
@@ -602,7 +643,7 @@ def analyze_results(result_dir):
             'avg_cpu_usage_total.png'
         )
 
-        # 创建箱线图函数
+        # 创建箱线图函数 (create box plot function)
         def create_horizontal_box_plot(data, title, xlabel, filename):
             plt.figure(figsize=(12, max(8, len(data['Algorithm'].unique()) * 0.3)))
             sns.boxplot(y=data['Algorithm'], x=data['Value'])
@@ -612,7 +653,7 @@ def analyze_results(result_dir):
             plt.savefig(os.path.join(result_dir, filename))
             plt.close()
 
-        # 绘制握手时间分布图
+        # 绘制握手时间分布图 （draw handshake time distribution plot）
         df_melted_handshake = pd.DataFrame(
             [(alg, time) for alg, data in results.items() for time in data['handshake_times']], 
             columns=['Algorithm', 'Value']
@@ -624,7 +665,7 @@ def analyze_results(result_dir):
             'handshake_time_distribution.png'
         )
 
-        # 绘制内存使用分布图
+        # 绘制内存使用分布图 （draw memory usage distribution plot）
         df_melted_memory = pd.DataFrame(
             [(alg, mem) for alg, data in results.items() for mem in data['memory_usages']], 
             columns=['Algorithm', 'Value']
@@ -636,7 +677,7 @@ def analyze_results(result_dir):
             'memory_usage_distribution.png'
         )
 
-        # 绘制CPU使用率(每核)分布图
+        # 绘制CPU使用率(每核)分布图 （draw CPU usage distribution plot (per core)）
         df_melted_cpu = pd.DataFrame(
             [(alg, cpu) for alg, data in results.items() for cpu in data['cpu_usages']], 
             columns=['Algorithm', 'Value']
@@ -648,7 +689,7 @@ def analyze_results(result_dir):
             'cpu_usage_distribution.png'
         )
 
-        # 绘制总CPU使用率分布图
+        # 绘制总CPU使用率分布图 （draw total CPU usage distribution plot）
         df_melted_cpu_total = pd.DataFrame(
             [(alg, cpu) for alg, data in results.items() for cpu in data['cpu_usages_total']], 
             columns=['Algorithm', 'Value']
@@ -660,11 +701,11 @@ def analyze_results(result_dir):
             'cpu_usage_total_distribution.png'
         )
 
-        # 保存详细统计信息到CSV
+        # 保存详细统计信息到CSV (save detailed statistics to CSV)
         df_stats = df.drop(['handshake_times', 'memory_usages', 'cpu_usages', 'cpu_usages_total'], axis=1)
         df_stats.to_csv(os.path.join(result_dir, 'performance_statistics.csv'))
 
-        # 输出每个算法的简要统计信息到summary.txt
+        # 输出每个算法的简要统计信息到summary.txt (output summary statistics for each algorithm to summary.txt)
         with open(os.path.join(result_dir, 'summary.txt'), 'w') as f:
             f.write("Performance Summary\n")
             f.write("==================\n\n")

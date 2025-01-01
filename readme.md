@@ -7,6 +7,7 @@ This project provides a comprehensive benchmarking suite for testing various pos
 - Benchmark multiple PQC algorithms including:
   - KEMs: Kyber, MLKEM, BIKE, HQC, Frodo, and classical algorithms
   - Signatures: Dilithium, SPHINCS+, Falcon, MAYO, and classical algorithms
+  - For more information, please refer to the yml file in the loop folder.
 - Network condition simulation (packet loss, bandwidth limitation)
 - Detailed performance metrics:
   - Handshake time
@@ -29,23 +30,26 @@ pip install -r requirements.txt
 ```
 
 Required packages:
-- psutil>=5.9.0
-- matplotlib>=3.5.0
-- seaborn>=0.11.0
-- pandas>=1.3.0
-- numpy>=1.21.0
-- pyyaml>=5.4.0
+- psutil=6.0.0
+- matplotlib=3.7.5.
+- seaborn=0.13.0
+- pandas=2.0.3
+- numpy=1.24.0
+- pyyaml=5.4.1
+- pytest=4.6.9
+- pytest-forked=1.1.3
+- pytest-xdist=1.31.0
 
 ### OpenSSL Requirements
 - Custom OpenSSL build with oqsprovider support
-- OpenSSL version 3.0.0 or higher
-- oqsprovider installed and configured
+- OpenSSL Default Provider (v3.3.2) OpenSSL OQS Provider (v0.7.1-dev) liboqs (v0.11)
+- oqsprovider installed and configured(Enable the algorithms you need to use as needed. You can refer to the oqs-provider page)
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pqc-tls-benchmark.git
+git clone https://github.com/EscapedShark/TLS_PQC_performance.git
 cd pqc-tls-benchmark
 ```
 
@@ -81,6 +85,7 @@ network_settings:
 ```
 
 ## Usage
+You can change the number of runs by modifying the run_benchmark function in benchmark.py
 
 ### Single Benchmark Run
 

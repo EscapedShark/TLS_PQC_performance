@@ -8,7 +8,7 @@ OPENSSL_PATH = "/usr/local/ssl/bin/openssl"
 
 ALGORITHM_MAPPING = {
     'kem': {
-        # 保持原样，因为没有 KEM 算法映射
+
     },
     'sig': {
         'rsa:1024': 'rsa_pss_rsae_sha128',
@@ -21,6 +21,7 @@ ALGORITHM_MAPPING = {
 def map_algorithm(alg_type, alg_name):
     """
     如果算法需要映射，则返回映射后的名称；否则返回原始名称
+    if the algorithm needs to be mapped, return the mapped name; otherwise return the original name
     """
     return ALGORITHM_MAPPING.get(alg_type, {}).get(alg_name, alg_name)
 
@@ -29,6 +30,7 @@ def run_server(kem_algorithm, sig_algorithm, key_dir, port):
     key_file = os.path.join(key_dir, "key.pem")
     
     # 使用映射函数来获取正确的算法名称
+    # use the mapping function to get the correct algorithm name
     mapped_kem = map_algorithm('kem', kem_algorithm)
     mapped_sig = map_algorithm('sig', sig_algorithm)
     
@@ -56,9 +58,11 @@ def run_server(kem_algorithm, sig_algorithm, key_dir, port):
         )
         
         # 等待服务器启动
+        # wait for the server to start
         time.sleep(2)
         
         # 检查服务器是否成功启动
+        # check if the server started successfully
         if process.poll() is not None:
             stdout, stderr = process.communicate()
             print(f"Server failed to start on port {port}. Return code: {process.returncode}")
@@ -73,10 +77,12 @@ def run_server(kem_algorithm, sig_algorithm, key_dir, port):
         return None
 
 # 添加一个用于验证服务器是否正在运行的函数
+# add a function to verify if the server is running
 def is_server_running(process):
     return process is not None and process.poll() is None
 
 # 如果需要，可以添加一个关闭服务器的函数
+# if needed, add a function to stop the server
 def stop_server(process):
     if process:
         process.terminate()

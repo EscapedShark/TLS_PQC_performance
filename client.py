@@ -17,6 +17,7 @@ ALGORITHM_MAPPING = {
 def map_algorithm(alg_type: str, alg_name: str) -> str:
     """
     如果算法需要映射，则返回映射后的名称；否则返回原始名称
+    if the algorithm needs to be mapped, return the mapped name; otherwise return the original name
     """
     return ALGORITHM_MAPPING.get(alg_type, {}).get(alg_name, alg_name)
 
@@ -24,9 +25,10 @@ def run_client(kem_algorithm: str, sig_algorithm: str, cert_path: str,
                port: int, timeout: int = 10) -> Tuple[Optional[float], str, Optional[int]]:
     """
     运行TLS客户端并执行握手
+    Run the TLS client and perform the handshake
     
     Returns:
-        Tuple[Optional[float], str, Optional[int]]: (握手时间, 输出信息, 进程PID)
+        Tuple[Optional[float], str, Optional[int]]: (握手时间, 输出信息, 进程PID) (handshake time, output information, process PID)
     """
     mapped_kem = map_algorithm('kem', kem_algorithm)
     mapped_sig = map_algorithm('sig', sig_algorithm)
@@ -46,7 +48,7 @@ def run_client(kem_algorithm: str, sig_algorithm: str, cert_path: str,
     ]
     
     try:
-        # 开始计时
+        # 开始计时 start timing
         start_time = time.perf_counter()
         
         process = subprocess.Popen(
@@ -58,14 +60,17 @@ def run_client(kem_algorithm: str, sig_algorithm: str, cert_path: str,
         )
         
         # 返回进程PID以便在benchmark中监控
+        # return the process PID for monitoring in the benchmark
         process_pid = process.pid
         
         stdout, stderr = process.communicate(timeout=timeout)
         
         # 结束计时
+        # end timing
         handshake_time = time.perf_counter() - start_time
         
         # 验证握手是否成功
+        # verify if the handshake was successful
         if "Verify return code: 0 (ok)" in stdout or "Handshake Complete" in stdout:
             return handshake_time, stdout, process_pid
         else:
